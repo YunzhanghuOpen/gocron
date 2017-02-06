@@ -24,6 +24,7 @@ import (
 	"runtime"
 	"sort"
 	"time"
+	"sync"
 )
 
 // Time location, default set by the time.Local (*time.Location)
@@ -346,6 +347,7 @@ func (j *Job) Weeks() *Job {
 
 // Class Scheduler, the only data member is the list of jobs.
 type Scheduler struct {
+	sync.RWMutex
 	// Array store jobs
 	jobs [MAXJOBNUM]*Job
 
@@ -401,6 +403,8 @@ func (s *Scheduler) NextRun() (*Job, time.Time) {
 
 // Schedule a new periodic job
 func (s *Scheduler) Every(interval uint64) *Job {
+	s.Lock()
+	defer s.Unlock()
 	job := NewJob(interval)
 	s.jobs[s.size] = job
 	s.size++
@@ -435,6 +439,8 @@ func (s *Scheduler) RunAllwithDelay(d int) {
 
 // Remove specific job j
 func (s *Scheduler) Remove(j interface{}) {
+	s.Lock()
+	defer s.Unlock()
 	i := 0
 	for ; i < s.size; i++ {
 		if s.jobs[i].jobFunc == getFunctionName(j) {
@@ -451,6 +457,8 @@ func (s *Scheduler) Remove(j interface{}) {
 
 // Delete all scheduled jobs
 func (s *Scheduler) Clear() {
+	s.Lock()
+	defer s.Unlock()
 	for i := 0; i < s.size; i++ {
 		s.jobs[i] = nil
 	}
