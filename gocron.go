@@ -371,7 +371,7 @@ func (s *Scheduler) Less(i, j int) bool {
 
 // Create a new scheduler
 func NewScheduler() *Scheduler {
-	return &Scheduler{[MAXJOBNUM]*Job{}, 0}
+	return &Scheduler{jobs: [MAXJOBNUM]*Job{}, size: 0}
 }
 
 // Get the current runnable jobs, which shouldRun is True
