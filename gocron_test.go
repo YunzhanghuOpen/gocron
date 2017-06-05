@@ -18,8 +18,8 @@ func taskWithParams(a int, b string) {
 }
 
 func TestSecond(*testing.T) {
-	defaultScheduler.Every(1).Second().Do(task)
-	defaultScheduler.Every(1).Second().Do(taskWithParams, 1, "hello")
+	defaultScheduler.Every(1).Month().Do(task)
+	defaultScheduler.Every(1).Month().AtDay(6).At("14:56").Do(taskWithParams, 1, "hello")
 	defaultScheduler.Start()
-	time.Sleep(10 * time.Second)
+	time.Sleep(100 * time.Second)
 }

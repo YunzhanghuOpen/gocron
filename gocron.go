@@ -25,6 +25,7 @@ import (
 	"sort"
 	"time"
 	"sync"
+	"fmt"
 )
 
 // Time location, default set by the time.Local (*time.Location)
@@ -50,6 +51,8 @@ type Job struct {
 	// optional time at which this job runs
 	atTime string
 
+	atDay int
+
 	// datetime of last run
 	lastRun time.Time
 	// datetime of next run
@@ -71,7 +74,7 @@ type Job struct {
 func NewJob(intervel uint64) *Job {
 	return &Job{
 		intervel,
-		"", "", "",
+		"", "", "", 0,
 		time.Unix(0, 0),
 		time.Unix(0, 0), 0,
 		time.Sunday,
@@ -133,7 +136,13 @@ func (j *Job) At(t string) *Job {
 		panic("time format error.")
 	}
 	// time.Date(2009, time.November, 10, 23, 0, 0, 0, time.UTC)
-	mock := time.Date(time.Now().Year(), time.Now().Month(), time.Now().Day(), int(hour), int(min), 0, 0, loc)
+	var mock time.Time
+	if j.atDay > 0 {
+		mock = time.Date(time.Now().Year(), time.Now().Month(), j.atDay, int(hour), int(min), 0, 0, loc)
+	} else {
+		mock = time.Date(time.Now().Year(), time.Now().Month(), time.Now().Day(), int(hour), int(min), 0, 0, loc)	
+	}
+	
 
 	if j.unit == "days" {
 		if time.Now().After(mock) {
@@ -151,7 +160,32 @@ func (j *Job) At(t string) *Job {
 		} else {
 			j.lastRun = time.Date(time.Now().Year(), time.Now().Month(), time.Now().Day()-7, hour, min, 0, 0, loc)
 		}
+	} else if j.unit == "months" {
+		if time.Now().After(mock) {
+			j.lastRun = mock
+		} else {
+			if j.atDay > 0 {
+				j.lastRun = time.Date(time.Now().Year(), time.Now().Month()-1, j.atDay, hour, min, 0, 0, loc)
+			} else {
+				j.lastRun = time.Date(time.Now().Year(), time.Now().Month()-1, time.Now().Day(), hour, min, 0, 0, loc)
+			}
+		}
 	}
+	fmt.Printf("[mock]: %s\t[lastRun]: %s\n", mock, j.lastRun)
+	return j
+}
+
+// month only
+func (j *Job) AtDay(day int) *Job {
+	if j.unit != "months" {
+		panic("only month can use it")
+	}
+	if day > 28 {
+		panic("day > 28")
+	}
+	
+	j.atDay = day
+	
 	return j
 }
 
@@ -170,27 +204,32 @@ func (j *Job) scheduleNextRun() {
 		}
 	}
 
-	if j.period != 0 {
-		// translate all the units to the Seconds
-		j.nextRun = j.lastRun.Add(j.period * time.Second)
+	if j.unit == "months" {
+		j.nextRun = j.lastRun.AddDate(0, int(j.interval), 0)
+		fmt.Printf("scheduleNextRun %s\n", j.nextRun)
 	} else {
-		switch j.unit {
-		case "minutes":
-			j.period = time.Duration(j.interval * 60)
-			break
-		case "hours":
-			j.period = time.Duration(j.interval * 60 * 60)
-			break
-		case "days":
-			j.period = time.Duration(j.interval * 60 * 60 * 24)
-			break
-		case "weeks":
-			j.period = time.Duration(j.interval * 60 * 60 * 24 * 7)
-			break
-		case "seconds":
-			j.period = time.Duration(j.interval)
+		if j.period != 0 {
+		// translate all the units to the Seconds
+			j.nextRun = j.lastRun.Add(j.period * time.Second)
+		} else {
+			switch j.unit {
+			case "minutes":
+				j.period = time.Duration(j.interval * 60)
+				break
+			case "hours":
+				j.period = time.Duration(j.interval * 60 * 60)
+				break
+			case "days":
+				j.period = time.Duration(j.interval * 60 * 60 * 24)
+				break
+			case "weeks":
+				j.period = time.Duration(j.interval * 60 * 60 * 24 * 7)
+				break
+			case "seconds":
+				j.period = time.Duration(j.interval)
+			}
+			j.nextRun = j.lastRun.Add(j.period * time.Second)
 		}
-		j.nextRun = j.lastRun.Add(j.period * time.Second)
 	}
 }
 
@@ -238,6 +277,21 @@ func (j *Job) Hour() (job *Job) {
 // Set the unit with hours
 func (j *Job) Hours() (job *Job) {
 	j.unit = "hours"
+	return j
+}
+
+//set the unit with month, which interval is 1
+func (j *Job) Month() (job *Job) {
+	if j.interval != 1 {
+		panic("")
+	}
+	job = j.Months()
+	return
+}
+
+// Set the unit with month
+func (j *Job) Months() (job *Job) {
+	j.unit = "months"
 	return j
 }
 
