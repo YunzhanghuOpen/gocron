@@ -20,12 +20,13 @@ package gocron
 
 import (
 	"errors"
+	"fmt"
 	"reflect"
 	"runtime"
 	"sort"
-	"time"
 	"sync"
-	"fmt"
+	"sync/atomic"
+	"time"
 )
 
 // Time location, default set by the time.Local (*time.Location)
@@ -68,6 +69,9 @@ type Job struct {
 
 	// Map for function and  params of function
 	fparams map[string]([]interface{})
+
+	// 用来表示任务是否正在运行，0未运行、1正在运行
+	running int32
 }
 
 // Create a new job with the time interval.
@@ -80,6 +84,7 @@ func NewJob(intervel uint64) *Job {
 		time.Sunday,
 		make(map[string]interface{}),
 		make(map[string]([]interface{})),
+		0,
 	}
 }
 
@@ -90,6 +95,13 @@ func (j *Job) shouldRun() bool {
 
 //Run the job and immdiately reschedulei it
 func (j *Job) run() (result []reflect.Value, err error) {
+	if !atomic.CompareAndSwapInt32(&j.running, 0, 1) {
+		// 如果swap失败，表示正在运行，直接退出
+		return
+	}
+	// 任务执行完成，将值改回0
+	defer atomic.StoreInt32(&j.running, 0)
+
 	f := reflect.ValueOf(j.funcs[j.jobFunc])
 	params := j.fparams[j.jobFunc]
 	if len(params) != f.Type().NumIn() {
@@ -140,9 +152,8 @@ func (j *Job) At(t string) *Job {
 	if j.atDay > 0 {
 		mock = time.Date(time.Now().Year(), time.Now().Month(), j.atDay, int(hour), int(min), 0, 0, loc)
 	} else {
-		mock = time.Date(time.Now().Year(), time.Now().Month(), time.Now().Day(), int(hour), int(min), 0, 0, loc)	
+		mock = time.Date(time.Now().Year(), time.Now().Month(), time.Now().Day(), int(hour), int(min), 0, 0, loc)
 	}
-	
 
 	if j.unit == "days" {
 		if time.Now().After(mock) {
@@ -183,9 +194,9 @@ func (j *Job) AtDay(day int) *Job {
 	if day > 28 {
 		panic("day > 28")
 	}
-	
+
 	j.atDay = day
-	
+
 	return j
 }
 
@@ -209,7 +220,7 @@ func (j *Job) scheduleNextRun() {
 		fmt.Printf("scheduleNextRun %s\n", j.nextRun)
 	} else {
 		if j.period != 0 {
-		// translate all the units to the Seconds
+			// translate all the units to the Seconds
 			j.nextRun = j.lastRun.Add(j.period * time.Second)
 		} else {
 			switch j.unit {
@@ -407,6 +418,8 @@ type Scheduler struct {
 
 	// Size of jobs which jobs holding.
 	size int
+
+	wg sync.WaitGroup
 }
 
 // Scheduler implements the sort.Interface{} for sorting jobs, by the time nextRun
@@ -471,7 +484,11 @@ func (s *Scheduler) RunPending() {
 
 	if n != 0 {
 		for i := 0; i < n; i++ {
-			runnableJobs[i].run()
+			s.wg.Add(1)
+			go func() {
+				defer s.wg.Done()
+				runnableJobs[i].run()
+			}()
 		}
 	}
 }
@@ -539,6 +556,11 @@ func (s *Scheduler) Start() chan bool {
 	return stopped
 }
 
+// Wait 等待所有任务执行完成
+func (s *Scheduler) Wait() {
+	s.wg.Wait()
+}
+
 // The following methods are shortcuts for not having to
 // create a Schduler instance
 
@@ -578,6 +600,11 @@ func RunAllwithDelay(d int) {
 // Run all jobs that are scheduled to run
 func Start() chan bool {
 	return defaultScheduler.Start()
+}
+
+// Wait 等待所有任务执行完成
+func Wait() {
+	defaultScheduler.Wait()
 }
 
 // Clear
