@@ -485,10 +485,10 @@ func (s *Scheduler) RunPending() {
 	if n != 0 {
 		for i := 0; i < n; i++ {
 			s.wg.Add(1)
-			go func() {
+			go func(j *Job) {
 				defer s.wg.Done()
-				runnableJobs[i].run()
-			}()
+				j.run()
+			}(runnableJobs[i])
 		}
 	}
 }
